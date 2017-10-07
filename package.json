@@ -1,0 +1,23 @@
+{
+  "name": "basicpipeline",
+  "version": "1.0.0",
+  "description": "This is a very basic exercise to get node.js -> PubSub -> Dataflow streaming -> BigQuery to work",
+  "main": "basicpipeline.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yuriatgoogle/basicpipeline.git"
+  },
+  "author": "Yuri Grinshteyn",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/yuriatgoogle/basicpipeline/issues"
+  },
+  "homepage": "https://github.com/yuriatgoogle/basicpipeline#readme",
+  "dependencies": {
+    "express": "4.16.1",
+    "@google-cloud/pubsub": "^0.14.4"
+  }
+}
