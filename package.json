@@ -4,7 +4,11 @@
   "description": "This is a very basic exercise to get node.js -> PubSub -> Dataflow streaming -> BigQuery to work",
   "main": "basicpipeline.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "deploy": "gcloud app deploy",
+    "start": "node basicpipeline.js"
+  },
+  "engines": {
+    "node": ">=4.3.2"
   },
   "repository": {
     "type": "git",
