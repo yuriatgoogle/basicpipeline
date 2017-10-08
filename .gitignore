@@ -58,3 +58,6 @@ typings/
 .env
 
 temp.txt
+*first-dataflow
+*word-count-beam
+.gitignore
