@@ -66,6 +66,7 @@ public class basicpipeline {
 
 
     //convert string to TableRow
+    //doesn't work
     protected class BuildRow extends DoFn<String, TableRow> {
         @ProcessElement
         public void processElement(ProcessContext c) {
