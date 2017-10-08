@@ -64,22 +64,12 @@ public class basicpipeline {
     public static String bucketId = "gs://ymg-dataflow-bucket"; //staging bucket for dataflow
     private static final String tableSchema = "{\"fields\":[{\"type\":\"STRING\",\"name\":\"message\",\"mode\":\"NULLABLE\"}]}"; //schema for the BQ table
 
-
-    //convert string to TableRow
-    //doesn't work
-    protected class BuildRow extends DoFn<String, TableRow> {
-        @ProcessElement
-        public void processElement(ProcessContext c) {
-            TableRow row = new TableRow();
-            row.set(c);
-            }
-          c.output(row);
-    }
         
     //create table schema from Json
     private static TableSchema createTableSchema(String schema) throws IOException {
         return JacksonFactory.getDefaultInstance().fromString(schema, TableSchema.class);
     }
+
 
     public static void main(String[] args) {
 
@@ -103,34 +93,38 @@ public class basicpipeline {
             return;
         }
         
-
-        Pipeline p = Pipeline.create(options);
-
-        // Read message from Pub/Sub
-        PCollection<String> messages = null;
-        messages = p.apply(PubsubIO.Read.named("Read message from PubSub").topic("projects/" + projectId + "/topics/" + topicID));
-
-   
         // Create a TableReference for the destination table
         TableReference tableReference = new TableReference();
         tableReference.setProjectId(projectId);
         tableReference.setDatasetId(datasetId);
         tableReference.setTableId(tableId);
+        
+        Pipeline p = Pipeline.create(options);
 
+        // Read message from Pub/Sub
+        PCollection<String> messages = null;
+        messages = p.apply(PubsubIO.
+            Read.named("Read message from PubSub")
+            .topic("projects/" + projectId + "/topics/" + topicID))
 
-        // Format tweets for BigQuery
-        PCollection<TableRow> formattedMessages = messages.apply(ParDo
-            .named("Format messages for BigQuery")
-            .of(new BuildRow()));
-
-
+        // Format tweets for BigQuery - convert string to table row
+        .apply("Format for BigQuery", ParDo.of(new DoFn<String, TableRow>() {
+            //@ProcessElement
+            public void processElement(ProcessContext c) {
+                c.output(new TableRow().set("message", c.element()));
+                //TODO - replace column reference
+            }
+        }))
+        
         // Write tweets to BigQuery
-        messages.apply(BigQueryIO.
-            Write.named("Write messages to BigQuery")
+        .apply("Write to BigQuery", BigQueryIO
+            .writeTableRows()
+            .to(tableReference)
             .withSchema(bqTableSchema)
             .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-            .to(tableReference));
+        );
 
+        //run pipeline
         p.run();
     }
 
