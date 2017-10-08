@@ -59,6 +59,8 @@ public class basicpipeline {
     //Google Cloud settings
     public static String topicID = "test-topic"; //pubsub topic
     public static String projectId = "ymg-basic-pipeline"; //project ID
+    public static String subscription = "projects/" + projectId + "/" + topicID + "/subscriptions/test-subscription"; //pubsub subscription
+    public static String readTopic = "projects/" + projectId + "/topics/" + topicID;
     public static String datasetId = "dataset"; //BigQuery dataset
     public static String tableId = "testTable"; //BigQuery table
     public static String bucketId = "gs://ymg-dataflow-bucket"; //staging bucket for dataflow
@@ -98,15 +100,17 @@ public class basicpipeline {
         tableReference.setProjectId(projectId);
         tableReference.setDatasetId(datasetId);
         tableReference.setTableId(tableId);
+
+        String tableName = projectId + ":" + datasetId + "." + tableId;
         
         Pipeline p = Pipeline.create(options);
 
         // Read message from Pub/Sub
-        PCollection<String> messages = null;
-        messages = p.apply(PubsubIO.
-            Read.named("Read message from PubSub")
-            .topic("projects/" + projectId + "/topics/" + topicID))
-
+        //PCollection<String> messages = null;
+        //messages = 
+        p.apply("ReadFromPubSub", PubsubIO.Read
+            .topic(readTopic))
+        
         // Format tweets for BigQuery - convert string to table row
         .apply("Format for BigQuery", ParDo.of(new DoFn<String, TableRow>() {
             //@ProcessElement
@@ -117,9 +121,8 @@ public class basicpipeline {
         }))
         
         // Write tweets to BigQuery
-        .apply("Write to BigQuery", BigQueryIO
-            .writeTableRows()
-            .to(tableReference)
+        .apply("Write to BigQuery", BigQueryIO.Write
+            .to(tableName)
             .withSchema(bqTableSchema)
             .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
         );
