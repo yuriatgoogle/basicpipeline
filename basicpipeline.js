@@ -1,3 +1,8 @@
+var http = require('http');
+var fs = require('fs');
+var formidable = require("formidable");
+var util = require('util');
+
 const express = require('express')
 const app = express()
 
@@ -8,6 +13,38 @@ const PubSub = require('@google-cloud/pubsub');
 const projectId = 'ymg-basic-pipeline';
 // PubSub topic name
 const topicName = 'test-topic';
+
+//function to create form
+function displayForm(res) {
+  fs.readFile('form.html', function (err, data) {
+      res.writeHead(200, {
+          'Content-Type': 'text/html',
+              'Content-Length': data.length
+      });
+      res.write(data);
+      res.end();
+  });
+}
+
+//function to process form
+function processAllFieldsOfTheForm(req, res) {
+  var form = new formidable.IncomingForm();
+
+  form.parse(req, function (err, fields) {
+      //Store the data from the fields in your data store.
+      //The data store could be a file or database or any other store based
+      //on your application.
+      res.writeHead(200, {
+          'content-type': 'text/plain'
+      });
+      console.log('received data: ' + fields);
+      res.write('received the data:\n\n');
+      publishMessage(topicName, fields.message);
+      res.end(util.inspect({
+          "message received" : fields.message
+      }));
+  });
+}
 
 // [START pubsub_publish_message]
 function publishMessage (topicName, data) {
@@ -33,8 +70,12 @@ function publishMessage (topicName, data) {
   
 
 app.get('/', function (req, res) {
-  res.send('Hello World!')
-  publishMessage(topicName, "test");
+  displayForm(res);
+  //publishMessage(topicName, "test");
+})
+
+app.post('/', function (req, res) {
+  processAllFieldsOfTheForm(req, res);
 })
 
 app.listen(8080, function () {
