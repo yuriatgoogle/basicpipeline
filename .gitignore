@@ -62,3 +62,4 @@ temp.txt
 *word-count-beam
 .gitignore
 *.org
+*_org
