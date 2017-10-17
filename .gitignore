@@ -63,3 +63,4 @@ temp.txt
 .gitignore
 *.org
 *_org
+.vscode
