@@ -26,19 +26,25 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
-import com.google.cloud.dataflow.sdk.Pipeline;
-import com.google.cloud.dataflow.sdk.io.BigQueryIO;
-import com.google.cloud.dataflow.sdk.io.PubsubIO;
-import com.google.cloud.dataflow.sdk.io.TextIO;
-import com.google.cloud.dataflow.sdk.options.DataflowPipelineOptions;
-import com.google.cloud.dataflow.sdk.options.DataflowPipelineWorkerPoolOptions.AutoscalingAlgorithmType;
-import com.google.cloud.dataflow.sdk.options.PipelineOptionsFactory;
-import com.google.cloud.dataflow.sdk.runners.DataflowPipelineRunner;
-import com.google.cloud.dataflow.sdk.runners.DirectPipelineRunner;
-import com.google.cloud.dataflow.sdk.transforms.DoFn;
-import com.google.cloud.dataflow.sdk.transforms.ParDo;
-import com.google.cloud.dataflow.sdk.values.PCollection; 
+import com.google.api.services.bigquery.model.TableFieldSchema;
+import com.google.api.services.bigquery.model.TableRow;
+import com.google.api.services.bigquery.model.TableSchema;
+import java.io.IOException;
+import java.util.ArrayList;
+import org.apache.beam.sdk.Pipeline;
+import org.apache.beam.sdk.PipelineResult;
+import org.apache.beam.sdk.io.TextIO;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
+import org.apache.beam.sdk.io.gcp.bigquery.InsertRetryPolicy;
+import org.apache.beam.sdk.options.Default;
+import org.apache.beam.sdk.options.Description;
+import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.options.StreamingOptions;
+import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableReference;
 import com.google.api.client.json.jackson2.JacksonFactory;
@@ -48,6 +54,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import org.yuriatgoogle.basicpipeline.StringToRowConverter;
 
 
 
@@ -73,18 +80,35 @@ public class basicpipeline {
     }
 
 
+    // Converts strings into BigQuery rows.
+    static class StringToRowConverter extends DoFn<String, TableRow> {
+        // * In this example, put the whole string into single BigQuery field.
+        @ProcessElement
+        public void processElement(ProcessContext c) {
+          c.output(new TableRow().set("message", c.element()));
+        }
+    
+        static TableSchema getSchema() {
+          return new TableSchema().setFields(new ArrayList<TableFieldSchema>() {
+                // Compose the list of TableFieldSchema from tableSchema.
+                {
+                  add(new TableFieldSchema().setName("message").setType("STRING")); //BQ field name
+                }
+          });
+        }
+      }
+
+
     public static void main(String[] args) {
 
     	// Setup Dataflow options
-        DataflowPipelineOptions options = PipelineOptionsFactory
-            .fromArgs(args)
+        StreamingOptions options = PipelineOptionsFactory.fromArgs(args)
             .withValidation()
-            .create()
-            .as(DataflowPipelineOptions.class);
-
-        options.setRunner(DataflowPipelineRunner.class);
+            .as(StreamingOptions.class);
         options.setStreaming(true);
-        options.setStagingLocation(bucketId);
+
+
+        Pipeline pipeline = Pipeline.create(options);
 
         //BQ table setup
         TableSchema bqTableSchema;
@@ -95,40 +119,28 @@ public class basicpipeline {
             return;
         }
         
-        // Create a TableReference for the destination table
-        TableReference tableReference = new TableReference();
-        tableReference.setProjectId(projectId);
-        tableReference.setDatasetId(datasetId);
-        tableReference.setTableId(tableId);
-
         String tableName = projectId + ":" + datasetId + "." + tableId;
         
         Pipeline p = Pipeline.create(options);
 
         // Read message from Pub/Sub
-        //PCollection<String> messages = null;
-        //messages = 
-        p.apply("ReadFromPubSub", PubsubIO.Read
-            .topic(readTopic))
+        p.apply("ReadFromPubSub", PubsubIO.readStrings()
+            .fromTopic(readTopic))
         
         // Format tweets for BigQuery - convert string to table row
-        .apply("Format for BigQuery", ParDo.of(new DoFn<String, TableRow>() {
-            //@ProcessElement
-            public void processElement(ProcessContext c) {
-                c.output(new TableRow().set("message", c.element()));
-                //TODO - replace column reference
-            }
-        }))
+        .apply("Format for BigQuery", ParDo.of(new StringToRowConverter()))
+
         
         // Write tweets to BigQuery
-        .apply("Write to BigQuery", BigQueryIO.Write
+        .apply("write to BQ", BigQueryIO.writeTableRows()
             .to(tableName)
-            .withSchema(bqTableSchema)
-            .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-        );
+            .withCreateDisposition(CreateDisposition.CREATE_IF_NEEDED)
+            .withWriteDisposition(WriteDisposition.WRITE_APPEND)
+            .withFailedInsertRetryPolicy(InsertRetryPolicy.alwaysRetry())
+            .withSchema(bqTableSchema));
 
         //run pipeline
-        p.run();
+        PipelineResult result = p.run();
     }
 
 }
